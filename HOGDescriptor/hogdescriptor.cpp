@@ -18,13 +18,15 @@ void HOGDescriptor::compute(const cv::Mat &image){
 	cellsize = Size(imagesize.width / cellnum.width, imagesize.height / cellnum.height);
 	blocknum = Size(cellnum.width - blockstride.width + 1, cellnum.height - blockstride.height + 1);
 
+	Mat hog_feature_vector(1, blocknum.area() * blockstride.area() * HOG_BIN_AMOUNT, CV_32FC1);
+
 	Mat img = image.clone();
 	Mat mag, angle;
 	std::vector<std::vector<float>> cells_features;
 	preprocess(img, img);
 	gradient(img, mag, angle);
 	hog(mag, angle, cells_features);
-	blocksNormalization(cells_features);
+	blocksNormalization(cells_features, hog_feature_vector);
 }
 
 void HOGDescriptor::preprocess(const cv::Mat &inmat, cv::Mat &outmat){
@@ -36,7 +38,6 @@ void HOGDescriptor::gradient(const cv::Mat &inmat, cv::Mat &mag, cv::Mat &angle)
 	Mat gx, gy;
 	Sobel(inmat, gx, CV_32F, 1, 0, 1);
 	Sobel(inmat, gy, CV_32F, 0, 1, 1);
-	Mat mag, angle;
 	cartToPolar(gx, gy, mag, angle, true);
 }
 
@@ -47,7 +48,7 @@ static void hogOnACell(const int x1, const int y1, const Size &cellsize,
 					const cv::Mat &mag, const cv::Mat &angle, std::vector<std::vector<float>> &cells_features)
 {
 	const static float max_angle = 180;
-	const static int total_bin_amount = 9;
+	const static int total_bin_amount = HOGDescriptor::HOG_BIN_AMOUNT;
 	assert((int)max_angle % total_bin_amount == 0);
 	const static int index_divider = cvRound( max_angle / total_bin_amount );
 	//lower_index_of_bin = floor(angle / index_divider)
@@ -108,10 +109,45 @@ void HOGDescriptor::hog(const cv::Mat &mag, const cv::Mat &angle, std::vector<st
 	}
 }
 
-void HOGDescriptor::blocksNormalization(std::vector<std::vector<float>> &cells_features){
+///block normalization
+inline float blockFeaturesSum(int x1, int y1, const cv::Size &blockstride, const cv::Size &cellnum, const std::vector<float> &featuressum){
+	float sum = 0;
+	for (int y = y1; y < y1 + blockstride.height; y++){
+		int baseidx = y * cellnum.width;
+		for (int x = x1; x < x1 + blockstride.width; x++){
+			sum += featuressum[baseidx + x];
+		}
+	}
+	return sum;
+}
+
+inline void produceHOGFeatureVector(int x1, int y1, float denominator, const cv::Size &blocknum, const cv::Size &blockstride, 
+									const cv::Size &cellnum, const std::vector<float> &featuressum, cv::Mat &feature_vector)
+{
+	int block_index = y1 * blocknum.width + x1;
+	int final_feature_index = block_index * blockstride.area();
+	for (int y = y1; y < y1 + blockstride.height; y++){
+		int baseidx = y * cellnum.width;
+		for (int x = x1; x < x1 + blockstride.width; x++){
+			float norm_feature = featuressum[baseidx + x] / denominator;
+			feature_vector.at<float>(final_feature_index) = norm_feature;
+		}
+	}
+}
+
+void HOGDescriptor::blocksNormalization(const std::vector<std::vector<float>> &cells_features, cv::Mat &hog_feature_vector){
+	std::vector<float> featuressum;
+	for (int i = 0; i < cells_features.size(); i++){
+		float sum = 0;
+		for (int j = 0; j < cells_features[i].size(); j++){
+			sum += cells_features[i][j];
+		}
+		featuressum.push_back(sum);
+	}
 	for (int y = 0; y < blocknum.height; y++){
 		for (int x = 0; x < blocknum.width; x++){
-
+			float sum = blockFeaturesSum(x, y, blockstride, cellnum, featuressum);
+			produceHOGFeatureVector(x, y, sum, blocknum, blockstride, cellnum, featuressum, hog_feature_vector);
 		}
 	}
 }
