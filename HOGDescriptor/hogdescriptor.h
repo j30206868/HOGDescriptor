@@ -18,6 +18,8 @@
 */
 class HOGDescriptor{
 public:
+	static const int HOG_BIN_AMOUNT = 9;
+public:
 	void compute(const cv::Mat &image);
 protected:
 	/*!
@@ -55,7 +57,7 @@ protected:
 	void preprocess(const cv::Mat &inmat, cv::Mat &outmat);
 	void gradient(const cv::Mat &inmat, cv::Mat &mag, cv::Mat &angle);
 	void hog(const cv::Mat &mag, const cv::Mat &angle, std::vector<std::vector<float>> &cells_features);
-	void blocksNormalization(std::vector<std::vector<float>> &cells_features);
+	void blocksNormalization(const std::vector<std::vector<float>> &cells_features, cv::Mat &hog_feature_vector);
 };
 
 #endif //CWZ_HOGDESCRIPTOR_H
